@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import operator
 import easyocr
+import matplotlib.pyplot as plt
 
 # Initialize EasyOCR Reader
 reader = easyocr.Reader(['en'])
@@ -142,14 +143,20 @@ def extract_digits(img):
             digits.append(digit)
     return digits
 
+def show_image(img, title="Image"):
+    plt.imshow(img, cmap='gray')
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
+    
 def pre_process_digit_image(img):
     """Preprocesses the digit image to remove the box around digits."""
     scale_factor = 2
     upscaled = cv2.resize(img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-    # proc = cv2.blur(upscaled, (5, 5))
+    # proc = cv2.blur(upscaled, (9, 9))
     proc = cv2.GaussianBlur(upscaled.copy(), (9, 9), 0)
     proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    proc = cv2.bitwise_not(proc, proc)
+    proc = cv2.bitwise_not(proc)
 
     margin_w = int(proc.shape[1] * 0.15)
     margin_h = int(proc.shape[0] * 0.15)
@@ -159,11 +166,13 @@ def pre_process_digit_image(img):
     proc[:, 0:margin_w] = 0
     proc[:, -margin_w:] = 0
 
+    # show_image(proc, "Preprocessed Image")
     return proc
 
 def recognize_digit(img):
     """Recognizes a single digit using EasyOCR."""
     result = reader.readtext(img, detail=0, allowlist="0123456789")
+    # result = reader.readtext(img, mag_ratio=2.0, allowlist="0123456789") 
     return result[0] if result else None
   
 def recognize_digits(digits):
@@ -228,5 +237,5 @@ def main(image_path):
     return predictions
 
 if __name__ == "__main__":
-    image_path = './images/sudoku4.png'
+    image_path = './images/sudoku1.png'
     main(image_path)

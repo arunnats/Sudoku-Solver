@@ -1,6 +1,7 @@
 import numpy as np
 import cv2 as cv
 import operator
+from tensorflow.keras.models import load_model
 
 def distance_between(p1, p2):
     """Calculate the Euclidean distance between two points"""
@@ -50,7 +51,50 @@ def warp_perspective(image, points):
     warped = cv.warpPerspective(image, m, (int(side), int(side)))
     return warped
 
+def divide_into_cells(image):
+    """Divide the image into cells"""
+    grid_size=9
+    height, width = image.shape[:2]
+    cell_size = height // grid_size
+    cells = []
+    for i in range(grid_size):
+        row_cells = []
+        for j in range(grid_size):
+            start_x = j * cell_size
+            start_y = i * cell_size
+            end_x = start_x + cell_size
+            end_y = start_y + cell_size
+            cell = image[start_y:end_y, start_x:end_x]
+            row_cells.append(cell)
+        cells.append(row_cells)
+    return cells
+
+def preprocess_cell(cell):
+    """Preprocess the cell for prediction"""
+    gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
+    resized = cv.resize(gray, (28, 28))  
+    normalized = resized.astype('float32') / 255.0
+    reshaped = normalized.reshape(1, 28, 28, 1) 
+    return reshaped
+
+def predict_digit(cell, model):
+    """Predict the digit in a cell"""
+    preprocessed_cell = preprocess_cell(cell)
+    prediction = model.predict(preprocessed_cell)
+    predicted_digit = np.argmax(prediction)
+    return predicted_digit
+
+def create_sudoku_matrix(cells, model):
+    """Create a 2D matrix with predicted digits and blank spaces"""
+    for row in cells:
+        for cell in row:
+            digit = predict_digit(cell, model)
+            print(digit)
+        print('\n')
+
 def main():
+    model = load_model('mnist_number_recognizer.keras')
+
     original, processed = preprocess_image('./images/sudoku4.png')
     
     largest_contour = find_largest_contour(processed)
@@ -60,6 +104,10 @@ def main():
     draw_corners(original, corner_points)
     
     warped_image = warp_perspective(original, corner_points)
+    
+    cells = divide_into_cells(warped_image)
+
+    sudoku_matrix = create_sudoku_matrix(cells, model)
     
     cv.imshow("Processed", processed)
     cv.imshow("Corners", original)

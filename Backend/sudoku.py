@@ -69,10 +69,20 @@ def divide_into_cells(image):
         cells.append(row_cells)
     return cells
 
+def display_cells(cells):
+    """Display the extracted cells for debugging"""
+    for i, row in enumerate(cells):
+        for j, cell in enumerate(row):
+            cv.imshow(f"Cell_{i}_{j}", cell)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
 def preprocess_cell(cell):
     """Preprocess the cell for prediction"""
     gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
-    resized = cv.resize(gray, (28, 28))  
+    blurred = cv.GaussianBlur(gray, (5, 5), 0)  
+    thresholded = cv.adaptiveThreshold(blurred, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2)  
+    resized = cv.resize(thresholded, (28, 28))  
     normalized = resized.astype('float32') / 255.0
     reshaped = normalized.reshape(1, 28, 28, 1) 
     return reshaped
@@ -86,11 +96,14 @@ def predict_digit(cell, model):
 
 def create_sudoku_matrix(cells, model):
     """Create a 2D matrix with predicted digits and blank spaces"""
+    sudoku_matrix = []
     for row in cells:
+        sudoku_row = []
         for cell in row:
             digit = predict_digit(cell, model)
-            print(digit)
-        print('\n')
+            sudoku_row.append(str(digit) if digit > 0 else ".") 
+        sudoku_matrix.append(sudoku_row)
+    return sudoku_matrix
 
 def main():
     model = load_model('mnist_number_recognizer.keras')
@@ -107,10 +120,14 @@ def main():
     
     cells = divide_into_cells(warped_image)
 
+    # display_cells(cells)
     sudoku_matrix = create_sudoku_matrix(cells, model)
     
-    cv.imshow("Processed", processed)
-    cv.imshow("Corners", original)
+    for row in sudoku_matrix:
+        print(" ".join(row))
+        
+    # cv.imshow("Processed", processed)
+    # cv.imshow("Corners", original)
     cv.imshow("Warped", warped_image)
     cv.waitKey(0)
     cv.destroyAllWindows()

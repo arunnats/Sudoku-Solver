@@ -21,6 +21,7 @@ image_display = (image * 255).astype(np.uint8)
 
 cv2.imshow("Random Digit", image_display)
 print(f"True Label: {np.argmax(true_label)}")
+print(f"Predicted Label: {predicted_label}")
 cv2.waitKey(0) 
 
 cv2.destroyAllWindows()

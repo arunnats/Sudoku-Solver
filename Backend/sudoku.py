@@ -4,29 +4,6 @@ import operator
 import matplotlib.pyplot as plt
 from keras.models import model_from_json
 
-def plot_many_images(images, titles, rows=1, columns=2):
-    """Plots each image in a given list as a grid structure using Matplotlib."""
-    for i, image in enumerate(images):
-        plt.subplot(rows, columns, i + 1)
-        plt.imshow(image, 'gray')
-        plt.title(titles[i])
-        plt.xticks([]), plt.yticks([]) 
-    plt.show()
-
-def show_image(img):
-    """Shows an image until any key is pressed"""
-    return img
-
-def show_digits(digits, colour=255):
-    """Shows list of 81 extracted digits in a grid format"""
-    rows = []
-    with_border = [cv2.copyMakeBorder(img.copy(), 1, 1, 1, 1, cv2.BORDER_CONSTANT, None, colour) for img in digits]
-    for i in range(9):
-        row = np.concatenate(with_border[i * 9:((i + 1) * 9)], axis=1)
-        rows.append(row)
-    img = show_image(np.concatenate(rows))
-    return img
-
 def convert_when_colour(colour, img):
     """Dynamically converts an image to colour if the input colour is a tuple and the image is grayscale."""
     if len(colour) == 3:
@@ -35,30 +12,6 @@ def convert_when_colour(colour, img):
         elif img.shape[2] == 1:
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     return img
-
-def display_points(in_img, points, radius=5, colour=(0, 0, 255)):
-    """Draws circular points on an image."""
-    img = in_img.copy()
-    if len(colour) == 3:
-        img = convert_when_colour(colour, img)
-    for point in points:
-        img = cv2.circle(img, tuple(int(x) for x in point), radius, colour, -1)
-    show_image(img)
-    return img
-
-def display_rects(in_img, rects, colour=(0, 0, 255)):
-    """Displays rectangles on the image."""
-    img = convert_when_colour(colour, in_img.copy())
-    for rect in rects:
-        img = cv2.rectangle(img, tuple(int(x) for x in rect[0]), tuple(int(x) for x in rect[1]), colour)
-    show_image(img)
-    return img
-
-def display_contours(in_img, contours, colour=(0, 0, 255), thickness=2):
-    """Displays contours on the image."""
-    img = convert_when_colour(colour, in_img.copy())
-    img = cv2.drawContours(img, contours, -1, colour, thickness)
-    show_image(img)
 
 def pre_process_image(img, skip_dilate=False):
     """Uses a blurring function, adaptive thresholding and dilation to expose the main features of an image."""
@@ -187,11 +140,20 @@ def extract_digits(img):
             digits.append(digit)
     return digits
 
-def pre_process_digit_image(img):
+def show_image(img, title="Image"):
+    plt.imshow(img, cmap='gray')
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
+    
+def pre_process_digit_image(proc):
     """Preprocesses the digit image to remove the box around digits."""
-    proc = cv2.GaussianBlur(img.copy(), (9, 9), 0)
+    scale_factor = 2.5
+    proc = cv2.resize(proc, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
+    # proc = cv2.blur(proc, (5, 5))
+    proc = cv2.GaussianBlur(proc.copy(), (5, 5), 0)
     proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    proc = cv2.bitwise_not(proc, proc)
+    proc = cv2.bitwise_not(proc)
 
     margin_w = int(proc.shape[1] * 0.15)
     margin_h = int(proc.shape[0] * 0.15)
@@ -201,27 +163,39 @@ def pre_process_digit_image(img):
     proc[:, 0:margin_w] = 0
     proc[:, -margin_w:] = 0
 
-    cv2.imshow("Preprocessed Image", proc)
-    cv2.waitKey(0)
+    # show_image(proc, "Preprocessed Image")
     return proc
 
-def predict_digits(digits, model):
-    """Predicts digits using a trained model."""
-    predictions = []
-    for digit in digits:
-        digit = digit / 255.0  
-        digit = digit.reshape(1, 28, 28, 1) 
-        prediction = model.predict(digit)
-        predictions.append(np.argmax(prediction))
-    return predictions
+def preprocess_for_keras(img):
+    """Preprocesses the digit image for Keras model prediction."""
+    img = cv2.resize(img, (28, 28))  # Resize to 28x28
+    img = img.astype('float32') / 255  # Normalize to [0, 1]
+    img = np.expand_dims(img, axis=-1)  # Add channel dimension
+    img = np.expand_dims(img, axis=0)  # Add batch dimension
+    return img
 
-def load_model(model_json_path, model_weights_path):
-    """Loads a pre-trained Keras model from JSON and weights files."""
-    with open(model_json_path, 'r') as json_file:
-        model_json = json_file.read()
-    model = model_from_json(model_json)
-    model.load_weights(model_weights_path)
-    return model
+
+def recognize_digit(img, model):
+    """Recognizes a single digit using the Keras model."""
+    processed_img = preprocess_for_keras(img)
+    predictions = model.predict(processed_img)
+    predicted_label = np.argmax(predictions)
+    return str(predicted_label) if predictions is not None else None
+  
+def recognize_digits(digits, model):
+    """Recognizes all digits in the grid using the Keras model."""
+    recognized_digits = []
+    for digit_img in digits:
+        if digit_img is not None and digit_img.size > 0:
+            mean_val = np.mean(digit_img)
+            if mean_val < 50:  
+                recognized_digits.append(".")
+            else:
+                recognized_digit = recognize_digit(digit_img, model)
+                recognized_digits.append(recognized_digit if recognized_digit is not None else None)
+        else:
+            recognized_digits.append(".")
+    return recognized_digits
 
 def print_predictions_grid(predictions):
     """Prints the predictions as a 9x9 grid."""
@@ -229,20 +203,34 @@ def print_predictions_grid(predictions):
         row = predictions[i * 9:(i + 1) * 9]
         print(" ".join(str(num) for num in row))
 
+def load_model(model_json_path, model_weights_path):
+    """Loads a pre-trained Keras model from JSON and weights files."""
+    with open(model_json_path, 'r') as json_file:
+        model_json = json_file.read()
+    model = model_from_json(model_json)
+    model.load_weights(model_weights_path)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+
 def main(image_path, model_json_path, model_weights_path):
     """Main function to process the image, extract digits, and make predictions."""
     # Load image
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     
+    if img is None:
+        print(f"Error: Image not found at path: {image_path}")
+        return
+    
+    # Load model
+    model = load_model(model_json_path, model_weights_path)
+    
     # Preprocess image
     preprocessed_img = pre_process_image(img)
-    cv2.imshow("Preprocessed Image", preprocessed_img)
-    cv2.waitKey(0)
     
     # Find corners and warp perspective
     corners = find_corners_of_largest_polygon(preprocessed_img)
     warped_img = crop_and_warp(img, corners)
-    cv2.imshow("Warped Image", warped_img)
     
     # Infer grid
     grid_squares = infer_grid(warped_img)
@@ -257,22 +245,15 @@ def main(image_path, model_json_path, model_weights_path):
         else:
             digits.append(None)
     
-    # Load model
-    model = load_model(model_json_path, model_weights_path)
-    
     # Predict digits
-    predictions = []
-    for digit in digits:
-        if digit is None:
-            predictions.append(".") 
-        else:
-            predictions.append(str(predict_digits([digit], model)[0]))  
+    predictions = recognize_digits(digits, model)
     
     # Show results
     print("Predictions:")
     print_predictions_grid(predictions)
-    cv2.waitKey(0)
+    
     return predictions
+
 
 if __name__ == "__main__":
     image_path = './images/sudoku4.png'

@@ -173,29 +173,45 @@ def find_largest_feature(inp_img, scan_tl=None, scan_br=None):
 
 def extract_digits(img):
     """Extracts digits from an image using contour detection."""
-    img = pre_process_image(img, skip_dilate=True)
+    img = pre_process_digit_image(img)
+    
     contours, _ = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
     digits = []
 
     for c in contours:
-        if cv2.contourArea(c) > 100:
+        if cv2.contourArea(c) > 100: 
             x, y, w, h = cv2.boundingRect(c)
             digit = img[y:y+h, x:x+w]
             digit = cv2.resize(digit, (28, 28))
             digits.append(digit)
     return digits
 
+def pre_process_digit_image(img):
+    """Preprocesses the digit image to remove the box around digits."""
+    proc = cv2.GaussianBlur(img.copy(), (5, 5), 0)
+    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    proc = cv2.bitwise_not(proc, proc)
+
+    margin_w = int(proc.shape[1] * 0.15)
+    margin_h = int(proc.shape[0] * 0.2)
+
+    proc[0:margin_h, :] = 0
+    proc[-margin_h:, :] = 0
+    proc[:, 0:margin_w] = 0
+    proc[:, -margin_w:] = 0
+
+    cv2.imshow("Preprocessed Image", proc)
+    cv2.waitKey(0)
+    return proc
+
 def predict_digits(digits, model):
     """Predicts digits using a trained model."""
     predictions = []
     for digit in digits:
-        cv2.imshow("digit", digit)
         digit = digit / 255.0  # Normalizing
         digit = digit.reshape(1, 28, 28, 1)  # Reshape for model
         prediction = model.predict(digit)
-        print(np.argmax(prediction))
-        cv2.waitKey(0)
         predictions.append(np.argmax(prediction))
     return predictions
 
@@ -214,32 +230,41 @@ def main(image_path, model_json_path, model_weights_path):
     
     # Preprocess image
     preprocessed_img = pre_process_image(img)
-    cv2.imshow("img1", preprocessed_img)
+    cv2.imshow("Preprocessed Image", preprocessed_img)
     cv2.waitKey(0)
     
     # Find corners and warp perspective
     corners = find_corners_of_largest_polygon(preprocessed_img)
     warped_img = crop_and_warp(img, corners)
-    cv2.imshow("img2", warped_img)
+    cv2.imshow("Warped Image", warped_img)
     cv2.waitKey(0)
+    
     # Infer grid
     grid_squares = infer_grid(warped_img)
     
     # Extract digits from each grid square
     digits = []
-    for sq in grid_squares:
-        rect_img = cut_from_rect(warped_img, sq)        
+    for idx, sq in enumerate(grid_squares):
+        rect_img = cut_from_rect(warped_img, sq)
         extracted_digits = extract_digits(rect_img)
-        digits.extend(extracted_digits)
+        if len(extracted_digits) > 0:
+            digits.append(extracted_digits[0]) 
+        else:
+            digits.append(None)
     
     # Load model
     model = load_model(model_json_path, model_weights_path)
     
     # Predict digits
-    predictions = predict_digits(digits, model)
+    predictions = []
+    for digit in digits:
+        if digit is None:
+            predictions.append(".") 
+        else:
+            predictions.append(str(predict_digits([digit], model)[0]))  
     
     # Show results
-    result_img = show_digits(digits)
+    result_img = show_digits([digit if digit is not None else np.zeros((28, 28), dtype=np.uint8) for digit in digits])
     print(f"Predictions: {predictions}")
 
     return predictions

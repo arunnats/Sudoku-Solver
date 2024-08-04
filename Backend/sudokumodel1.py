@@ -166,21 +166,35 @@ def pre_process_digit_image(img):
     # show_image(proc, "Preprocessed Image")
     return proc
 
-def recognize_digit(img):
-    """Recognizes a single digit using EasyOCR."""
-    predictions = model.predict(img)
+def preprocess_for_keras(img):
+    """Preprocesses the digit image for Keras model prediction."""
+    img = cv2.resize(img, (28, 28))  # Resize to 28x28
+    img = img.astype('float32') / 255  # Normalize to [0, 1]
+    img = np.expand_dims(img, axis=-1)  # Add channel dimension
+    img = np.expand_dims(img, axis=0)  # Add batch dimension
+    return img
+
+
+def recognize_digit(img, model):
+    """Recognizes a single digit using the Keras model."""
+    processed_img = preprocess_for_keras(img)
+    predictions = model.predict(processed_img)
     predicted_label = np.argmax(predictions)
-    return predicted_label if predicted_label else None
+    return str(predicted_label) if predictions is not None else None
   
-def recognize_digits(digits):
-    """Recognizes all digits in the grid using EasyOCR."""
+def recognize_digits(digits, model):
+    """Recognizes all digits in the grid using the Keras model."""
     recognized_digits = []
     for digit_img in digits:
-        if np.mean(digit_img) < 50:
-            recognized_digits.append(None)
+        if digit_img is not None and digit_img.size > 0:
+            mean_val = np.mean(digit_img)
+            if mean_val < 50:  
+                recognized_digits.append(".")
+            else:
+                recognized_digit = recognize_digit(digit_img, model)
+                recognized_digits.append(recognized_digit if recognized_digit is not None else None)
         else:
-            recognized_digit = recognize_digit(digit_img)
-            recognized_digits.append(recognized_digit if recognized_digit is not None else None)
+            recognized_digits.append(".")
     return recognized_digits
 
 def print_predictions_grid(predictions):
@@ -195,9 +209,11 @@ def load_model(model_json_path, model_weights_path):
         model_json = json_file.read()
     model = model_from_json(model_json)
     model.load_weights(model_weights_path)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
-def main(image_path):
+
+def main(image_path, model_json_path, model_weights_path):
     """Main function to process the image, extract digits, and make predictions."""
     # Load image
     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
@@ -230,19 +246,14 @@ def main(image_path):
             digits.append(None)
     
     # Predict digits
-    predictions = []
-    for digit in digits:
-        if digit is None:
-            predictions.append(".") 
-        else:
-            recognized_digits = recognize_digits([digit])
-            predictions.append(str(recognized_digits[0]) if recognized_digits[0] is not None else ".")
+    predictions = recognize_digits(digits, model)
     
     # Show results
     print("Predictions:")
     print_predictions_grid(predictions)
     
     return predictions
+
 
 if __name__ == "__main__":
     image_path = './images/sudoku4.png'

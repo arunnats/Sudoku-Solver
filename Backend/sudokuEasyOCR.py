@@ -149,12 +149,12 @@ def show_image(img, title="Image"):
     plt.axis('off')
     plt.show()
     
-def pre_process_digit_image(img):
+def pre_process_digit_image(proc):
     """Preprocesses the digit image to remove the box around digits."""
-    scale_factor = 2
-    upscaled = cv2.resize(img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-    # proc = cv2.blur(upscaled, (9, 9))
-    proc = cv2.GaussianBlur(upscaled.copy(), (9, 9), 0)
+    scale_factor = 2.5
+    proc = cv2.resize(proc, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
+    # proc = cv2.blur(proc, (5, 5))
+    proc = cv2.GaussianBlur(proc.copy(), (5, 5), 0)
     proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     proc = cv2.bitwise_not(proc)
 
@@ -237,5 +237,5 @@ def main(image_path):
     return predictions
 
 if __name__ == "__main__":
-    image_path = './images/sudoku1.png'
+    image_path = './images/sudoku4.png'
     main(image_path)

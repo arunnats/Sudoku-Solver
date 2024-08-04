@@ -194,23 +194,23 @@ def pre_process_digit_image(img):
     proc = cv2.bitwise_not(proc, proc)
 
     margin_w = int(proc.shape[1] * 0.15)
-    margin_h = int(proc.shape[0] * 0.2)
+    margin_h = int(proc.shape[0] * 0.15)
 
     proc[0:margin_h, :] = 0
     proc[-margin_h:, :] = 0
     proc[:, 0:margin_w] = 0
     proc[:, -margin_w:] = 0
 
-    cv2.imshow("Preprocessed Image", proc)
-    cv2.waitKey(0)
+    # cv2.imshow("Preprocessed Image", proc)
+    # cv2.waitKey(0)
     return proc
 
 def predict_digits(digits, model):
     """Predicts digits using a trained model."""
     predictions = []
     for digit in digits:
-        digit = digit / 255.0  # Normalizing
-        digit = digit.reshape(1, 28, 28, 1)  # Reshape for model
+        digit = digit / 255.0  
+        digit = digit.reshape(1, 28, 28, 1) 
         prediction = model.predict(digit)
         predictions.append(np.argmax(prediction))
     return predictions
@@ -222,6 +222,12 @@ def load_model(model_json_path, model_weights_path):
     model = model_from_json(model_json)
     model.load_weights(model_weights_path)
     return model
+
+def print_predictions_grid(predictions):
+    """Prints the predictions as a 9x9 grid."""
+    for i in range(9):
+        row = predictions[i * 9:(i + 1) * 9]
+        print(" ".join(str(num) for num in row))
 
 def main(image_path, model_json_path, model_weights_path):
     """Main function to process the image, extract digits, and make predictions."""
@@ -237,7 +243,6 @@ def main(image_path, model_json_path, model_weights_path):
     corners = find_corners_of_largest_polygon(preprocessed_img)
     warped_img = crop_and_warp(img, corners)
     cv2.imshow("Warped Image", warped_img)
-    cv2.waitKey(0)
     
     # Infer grid
     grid_squares = infer_grid(warped_img)
@@ -264,9 +269,9 @@ def main(image_path, model_json_path, model_weights_path):
             predictions.append(str(predict_digits([digit], model)[0]))  
     
     # Show results
-    result_img = show_digits([digit if digit is not None else np.zeros((28, 28), dtype=np.uint8) for digit in digits])
-    print(f"Predictions: {predictions}")
-
+    print("Predictions:")
+    print_predictions_grid(predictions)
+    cv2.waitKey(0)
     return predictions
 
 if __name__ == "__main__":

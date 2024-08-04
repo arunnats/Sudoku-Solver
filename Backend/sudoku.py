@@ -1,136 +1,252 @@
 import numpy as np
-import cv2 as cv
+import cv2
 import operator
-from tensorflow.keras.models import load_model
+import matplotlib.pyplot as plt
+from keras.models import model_from_json
+
+def plot_many_images(images, titles, rows=1, columns=2):
+    """Plots each image in a given list as a grid structure using Matplotlib."""
+    for i, image in enumerate(images):
+        plt.subplot(rows, columns, i + 1)
+        plt.imshow(image, 'gray')
+        plt.title(titles[i])
+        plt.xticks([]), plt.yticks([]) 
+    plt.show()
+
+def show_image(img):
+    """Shows an image until any key is pressed"""
+    return img
+
+def show_digits(digits, colour=255):
+    """Shows list of 81 extracted digits in a grid format"""
+    rows = []
+    with_border = [cv2.copyMakeBorder(img.copy(), 1, 1, 1, 1, cv2.BORDER_CONSTANT, None, colour) for img in digits]
+    for i in range(9):
+        row = np.concatenate(with_border[i * 9:((i + 1) * 9)], axis=1)
+        rows.append(row)
+    img = show_image(np.concatenate(rows))
+    return img
+
+def convert_when_colour(colour, img):
+    """Dynamically converts an image to colour if the input colour is a tuple and the image is grayscale."""
+    if len(colour) == 3:
+        if len(img.shape) == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif img.shape[2] == 1:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    return img
+
+def display_points(in_img, points, radius=5, colour=(0, 0, 255)):
+    """Draws circular points on an image."""
+    img = in_img.copy()
+    if len(colour) == 3:
+        img = convert_when_colour(colour, img)
+    for point in points:
+        img = cv2.circle(img, tuple(int(x) for x in point), radius, colour, -1)
+    show_image(img)
+    return img
+
+def display_rects(in_img, rects, colour=(0, 0, 255)):
+    """Displays rectangles on the image."""
+    img = convert_when_colour(colour, in_img.copy())
+    for rect in rects:
+        img = cv2.rectangle(img, tuple(int(x) for x in rect[0]), tuple(int(x) for x in rect[1]), colour)
+    show_image(img)
+    return img
+
+def display_contours(in_img, contours, colour=(0, 0, 255), thickness=2):
+    """Displays contours on the image."""
+    img = convert_when_colour(colour, in_img.copy())
+    img = cv2.drawContours(img, contours, -1, colour, thickness)
+    show_image(img)
+
+def pre_process_image(img, skip_dilate=False):
+    """Uses a blurring function, adaptive thresholding and dilation to expose the main features of an image."""
+    proc = cv2.GaussianBlur(img.copy(), (9, 9), 0)
+    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    proc = cv2.bitwise_not(proc, proc)
+    if not skip_dilate:
+        kernel = np.array([[0., 1., 0.], [1., 1., 1.], [0., 1., 0.]], np.uint8)
+        proc = cv2.dilate(proc, kernel)
+    return proc
+
+def find_corners_of_largest_polygon(img):
+    """Finds the 4 extreme corners of the largest contour in the image."""
+    contours, _ = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    polygon = contours[0]
+    bottom_right, _ = max(enumerate([pt[0][0] + pt[0][1] for pt in polygon]), key=operator.itemgetter(1))
+    top_left, _ = min(enumerate([pt[0][0] + pt[0][1] for pt in polygon]), key=operator.itemgetter(1))
+    bottom_left, _ = min(enumerate([pt[0][0] - pt[0][1] for pt in polygon]), key=operator.itemgetter(1))
+    top_right, _ = max(enumerate([pt[0][0] - pt[0][1] for pt in polygon]), key=operator.itemgetter(1))
+    return [polygon[top_left][0], polygon[top_right][0], polygon[bottom_right][0], polygon[bottom_left][0]]
 
 def distance_between(p1, p2):
-    """Calculate the Euclidean distance between two points"""
+    """Returns the scalar distance between two points"""
     a = p2[0] - p1[0]
     b = p2[1] - p1[1]
     return np.sqrt((a ** 2) + (b ** 2))
 
-def preprocess_image(image_path):
-    """Read and preprocess the image"""
-    image = cv.imread(image_path)
-    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    blurred = cv.GaussianBlur(gray, (9, 9), 0)
-
-    thresholded = cv.adaptiveThreshold(blurred, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2)
-    inverted = cv.bitwise_not(thresholded)
-    return image, inverted
-
-def find_largest_contour(processed_image):
-    """Find the largest contour in the processed image"""
-    contours, _ = cv.findContours(processed_image.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv.contourArea, reverse=True)
-    return contours[0]
-
-def get_corner_points(contour):
-    """Get the corner points from the largest contour."""
-    bottom_right, _ = max(enumerate([pt[0][0] + pt[0][1] for pt in contour]), key=operator.itemgetter(1))
-    top_left, _ = min(enumerate([pt[0][0] + pt[0][1] for pt in contour]), key=operator.itemgetter(1))
-    bottom_left, _ = min(enumerate([pt[0][0] - pt[0][1] for pt in contour]), key=operator.itemgetter(1))
-    top_right, _ = max(enumerate([pt[0][0] - pt[0][1] for pt in contour]), key=operator.itemgetter(1))
-    return [contour[top_left][0], contour[top_right][0], contour[bottom_right][0], contour[bottom_left][0]]
-
-def draw_corners(image, points):
-    """Draw circles on the detected corner points"""
-    for point in points:
-        cv.circle(image, tuple(point), 5, (0, 0, 255), -1)
-
-def warp_perspective(image, points):
-    """Apply perspective transform"""
-    top_left, top_right, bottom_right, bottom_left = points
+def crop_and_warp(img, crop_rect):
+    """Crops and warps a rectangular section from an image into a square of similar size."""
+    top_left, top_right, bottom_right, bottom_left = crop_rect
     src = np.array([top_left, top_right, bottom_right, bottom_left], dtype='float32')
-    side = max([distance_between(bottom_right, top_right), 
-                distance_between(top_left, bottom_left),
-                distance_between(bottom_right, bottom_left),   
-                distance_between(top_left, top_right)])
+    side = max([
+        distance_between(bottom_right, top_right),
+        distance_between(top_left, bottom_left),
+        distance_between(bottom_right, bottom_left),
+        distance_between(top_left, top_right)
+    ])
     dst = np.array([[0, 0], [side - 1, 0], [side - 1, side - 1], [0, side - 1]], dtype='float32')
-    m = cv.getPerspectiveTransform(src, dst)
-    warped = cv.warpPerspective(image, m, (int(side), int(side)))
-    return warped
+    m = cv2.getPerspectiveTransform(src, dst)
+    return cv2.warpPerspective(img, m, (int(side), int(side)))
 
-def divide_into_cells(image):
-    """Divide the image into cells"""
-    grid_size=9
-    height, width = image.shape[:2]
-    cell_size = height // grid_size
-    cells = []
-    for i in range(grid_size):
-        row_cells = []
-        for j in range(grid_size):
-            start_x = j * cell_size
-            start_y = i * cell_size
-            end_x = start_x + cell_size
-            end_y = start_y + cell_size
-            cell = image[start_y:end_y, start_x:end_x]
-            row_cells.append(cell)
-        cells.append(row_cells)
-    return cells
+def infer_grid(img):
+    """Infers 81 cell grid from a square image."""
+    squares = []
+    side = img.shape[0] / 9
+    for j in range(9):
+        for i in range(9):
+            p1 = (i * side, j * side)
+            p2 = ((i + 1) * side, (j + 1) * side)
+            squares.append((p1, p2))
+    return squares
 
-def display_cells(cells):
-    """Display the extracted cells for debugging"""
-    for i, row in enumerate(cells):
-        for j, cell in enumerate(row):
-            cv.imshow(f"Cell_{i}_{j}", cell)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
+def cut_from_rect(img, rect):
+    """Cuts a rectangle from an image using the top left and bottom right points."""
+    return img[int(rect[0][1]):int(rect[1][1]), int(rect[0][0]):int(rect[1][0])]
 
-def preprocess_cell(cell):
-    """Preprocess the cell for prediction"""
-    gray = cv.cvtColor(cell, cv.COLOR_BGR2GRAY)
-    blurred = cv.GaussianBlur(gray, (5, 5), 0)  
-    thresholded = cv.adaptiveThreshold(blurred, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2)  
-    resized = cv.resize(thresholded, (28, 28))  
-    normalized = resized.astype('float32') / 255.0
-    reshaped = normalized.reshape(1, 28, 28, 1) 
-    return reshaped
+def scale_and_centre(img, size, margin=0, background=0):
+    """Scales and centres an image onto a new background square."""
+    h, w = img.shape[:2]
+    def centre_pad(length):
+        if length % 2 == 0:
+            side1 = int((size - length) / 2)
+            side2 = side1
+        else:
+            side1 = int((size - length) / 2)
+            side2 = side1 + 1
+        return side1, side2
 
-def predict_digit(cell, model):
-    """Predict the digit in a cell"""
-    preprocessed_cell = preprocess_cell(cell)
-    prediction = model.predict(preprocessed_cell)
-    predicted_digit = np.argmax(prediction)
-    return predicted_digit
+    def scale(r, x):
+        return int(r * x)
 
-def create_sudoku_matrix(cells, model):
-    """Create a 2D matrix with predicted digits and blank spaces"""
-    sudoku_matrix = []
-    for row in cells:
-        sudoku_row = []
-        for cell in row:
-            digit = predict_digit(cell, model)
-            sudoku_row.append(str(digit) if digit > 0 else ".") 
-        sudoku_matrix.append(sudoku_row)
-    return sudoku_matrix
+    if h > w:
+        t_pad = int(margin / 2)
+        b_pad = t_pad
+        ratio = (size - margin) / h
+        w, h = scale(ratio, w), scale(ratio, h)
+        l_pad, r_pad = centre_pad(w)
+    else:
+        l_pad = int(margin / 2)
+        r_pad = l_pad
+        ratio = (size - margin) / w
+        w, h = scale(ratio, w), scale(ratio, h)
+        t_pad, b_pad = centre_pad(h)
 
-def main():
-    model = load_model('mnist_number_recognizer.keras')
+    img = cv2.resize(img, (w, h))
+    img = cv2.copyMakeBorder(img, t_pad, b_pad, l_pad, r_pad, cv2.BORDER_CONSTANT, None, background)
+    return cv2.resize(img, (size, size))
 
-    original, processed = preprocess_image('./images/sudoku4.png')
+def find_largest_feature(inp_img, scan_tl=None, scan_br=None):
+    """Finds the biggest connected pixel structure in the image."""
+    img = inp_img.copy()
+    height, width = img.shape[:2]
+    max_area = 0
+    seed_point = (None, None)
+
+    if scan_tl is None:
+        scan_tl = [0, 0]
+
+    if scan_br is None:
+        scan_br = [width, height]
+
+    for x in range(scan_tl[0], scan_br[0]):
+        for y in range(scan_tl[1], scan_br[1]):
+            if img.item(y, x) == 255 and x < width and y < height:
+                area = cv2.floodFill(img, None, (x, y), 64)
+                if area[0] > max_area:
+                    max_area = area[0]
+                    seed_point = (x, y)
+
+    return seed_point
+
+def extract_digits(img):
+    """Extracts digits from an image using contour detection."""
+    img = pre_process_image(img, skip_dilate=True)
+    contours, _ = cv2.findContours(img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    digits = []
+
+    for c in contours:
+        if cv2.contourArea(c) > 100:
+            x, y, w, h = cv2.boundingRect(c)
+            digit = img[y:y+h, x:x+w]
+            digit = cv2.resize(digit, (28, 28))
+            digits.append(digit)
+    return digits
+
+def predict_digits(digits, model):
+    """Predicts digits using a trained model."""
+    predictions = []
+    for digit in digits:
+        cv2.imshow("digit", digit)
+        digit = digit / 255.0  # Normalizing
+        digit = digit.reshape(1, 28, 28, 1)  # Reshape for model
+        prediction = model.predict(digit)
+        print(np.argmax(prediction))
+        cv2.waitKey(0)
+        predictions.append(np.argmax(prediction))
+    return predictions
+
+def load_model(model_json_path, model_weights_path):
+    """Loads a pre-trained Keras model from JSON and weights files."""
+    with open(model_json_path, 'r') as json_file:
+        model_json = json_file.read()
+    model = model_from_json(model_json)
+    model.load_weights(model_weights_path)
+    return model
+
+def main(image_path, model_json_path, model_weights_path):
+    """Main function to process the image, extract digits, and make predictions."""
+    # Load image
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     
-    largest_contour = find_largest_contour(processed)
+    # Preprocess image
+    preprocessed_img = pre_process_image(img)
+    cv2.imshow("img1", preprocessed_img)
+    cv2.waitKey(0)
     
-    corner_points = get_corner_points(largest_contour)
+    # Find corners and warp perspective
+    corners = find_corners_of_largest_polygon(preprocessed_img)
+    warped_img = crop_and_warp(img, corners)
+    cv2.imshow("img2", warped_img)
+    cv2.waitKey(0)
+    # Infer grid
+    grid_squares = infer_grid(warped_img)
     
-    draw_corners(original, corner_points)
+    # Extract digits from each grid square
+    digits = []
+    for sq in grid_squares:
+        rect_img = cut_from_rect(warped_img, sq)        
+        extracted_digits = extract_digits(rect_img)
+        digits.extend(extracted_digits)
     
-    warped_image = warp_perspective(original, corner_points)
+    # Load model
+    model = load_model(model_json_path, model_weights_path)
     
-    cells = divide_into_cells(warped_image)
+    # Predict digits
+    predictions = predict_digits(digits, model)
+    
+    # Show results
+    result_img = show_digits(digits)
+    print(f"Predictions: {predictions}")
 
-    # display_cells(cells)
-    sudoku_matrix = create_sudoku_matrix(cells, model)
-    
-    for row in sudoku_matrix:
-        print(" ".join(row))
-        
-    # cv.imshow("Processed", processed)
-    # cv.imshow("Corners", original)
-    cv.imshow("Warped", warped_image)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
+    return predictions
 
 if __name__ == "__main__":
-    main()
+    image_path = './images/sudoku4.png'
+    model_json_path = './model.json'
+    model_weights_path = './model.weights.h5'
+    
+    main(image_path, model_json_path, model_weights_path)

@@ -39,5 +39,8 @@ model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=10, batch_s
 scores = model.evaluate(X_test, y_test, verbose=0)
 print(f"Large CNN Error: {100 - scores[1] * 100:.2f}%")
 
-# Save model
-model.save('mnist_number_recognizer.keras')
+model_json = model.to_json()
+with open("model.json", "w") as json_file:
+    json_file.write(model_json)
+model.save_weights("model.weights.h5")
+print("Saved model to disk")

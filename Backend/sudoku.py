@@ -148,11 +148,11 @@ def show_image(img, title="Image"):
     
 def pre_process_digit_image(proc):
     """Preprocesses the digit image to remove the box around digits."""
-    scale_factor = 2.5
+    scale_factor = 1.3
     proc = cv2.resize(proc, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-    # proc = cv2.blur(proc, (5, 5))
-    proc = cv2.GaussianBlur(proc.copy(), (5, 5), 0)
-    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    # proc = cv2.blur(proc, (2, 2))
+    proc = cv2.GaussianBlur(proc.copy(), (3, 3), 0)
+    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 5, 2)
     proc = cv2.bitwise_not(proc)
 
     margin_w = int(proc.shape[1] * 0.15)
@@ -173,7 +173,6 @@ def preprocess_for_keras(img):
     img = np.expand_dims(img, axis=-1)  # Add channel dimension
     img = np.expand_dims(img, axis=0)  # Add batch dimension
     return img
-
 
 def recognize_digit(img, model):
     """Recognizes a single digit using the Keras model."""

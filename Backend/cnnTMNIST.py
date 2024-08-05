@@ -21,7 +21,7 @@ X = X.values.reshape(-1, 28, 28, 1).astype('float32') / 255
 y = to_categorical(y)
 
 # Split data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 
 # Define the model
 model = keras.Sequential([
@@ -40,7 +40,7 @@ model = keras.Sequential([
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 # Train the model
-history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=35, batch_size=250)
+history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=20, batch_size=200)
 
 # Evaluate the model
 scores = model.evaluate(X_test, y_test, verbose=0)

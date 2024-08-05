@@ -148,11 +148,11 @@ def show_image(img, title="Image"):
     
 def pre_process_digit_image(proc):
     """Preprocesses the digit image to remove the box around digits."""
-    scale_factor = 1.8
+    scale_factor = 1.5
     proc = cv2.resize(proc, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
     # proc = cv2.blur(proc, (2, 2))
-    proc = cv2.GaussianBlur(proc.copy(), (5, 5), 0)
-    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 9, 2)
+    proc = cv2.GaussianBlur(proc.copy(), (3, 3), 0)
+    proc = cv2.adaptiveThreshold(proc, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     proc = cv2.bitwise_not(proc)
 
     margin_w = int(proc.shape[1] * 0.15)

@@ -40,7 +40,7 @@ model = keras.Sequential([
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 # Train the model
-history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=30, batch_size=200)
+history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=35, batch_size=250)
 
 # Evaluate the model
 scores = model.evaluate(X_test, y_test, verbose=0)
